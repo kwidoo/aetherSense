@@ -39,7 +39,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  mac[6];         /* see MAC Handling note above     */
     uint16_t payload_len;    /* 0 for RSSI-only records         */
     uint16_t crc16;
-} rssi_record_t;             /* total: 24 bytes                 */
+} rssi_record_t;             /* total: 26 bytes                 */
 
 /* ── CSI record header (followed by csi_len raw bytes) ─────────────────── */
 typedef struct __attribute__((packed)) {
@@ -53,7 +53,7 @@ typedef struct __attribute__((packed)) {
     uint8_t  mac[6];
     uint16_t csi_len;        /* number of raw CSI bytes that follow */
     uint16_t crc16;          /* covers header only              */
-} csi_record_header_t;       /* total: 22 bytes                 */
+} csi_record_header_t;       /* total: 24 bytes                 */
 
 /* ── Status record ──────────────────────────────────────────────────────── */
 typedef struct __attribute__((packed)) {
@@ -67,4 +67,4 @@ typedef struct __attribute__((packed)) {
     uint32_t queue_high_watermark;
     uint8_t  channel;
     uint16_t crc16;
-} status_record_t;           /* total: 23 bytes                 */
+} status_record_t;           /* total: 27 bytes                 */

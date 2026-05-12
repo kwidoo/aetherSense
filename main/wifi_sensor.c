@@ -2,6 +2,7 @@
 #include "ring_buffer.h"
 #include "record_protocol.h"
 #include "sensor_config.h"
+#include "crc16.h"
 
 #include <string.h>
 #include "freertos/FreeRTOS.h"
@@ -20,19 +21,6 @@ volatile uint32_t    g_csi_records_sent  = 0;
 
 static volatile uint32_t s_rssi_seq = 0;
 static volatile uint32_t s_csi_seq  = 0;
-
-/* ── CRC-16/CCITT-FALSE (duplicated to keep modules self-contained) ──────── */
-static uint16_t crc16_ccitt(const uint8_t *data, size_t len)
-{
-    uint16_t crc = 0xFFFF;
-    for (size_t i = 0; i < len; i++) {
-        crc ^= (uint16_t)data[i] << 8;
-        for (int j = 0; j < 8; j++) {
-            crc = (crc & 0x8000) ? (crc << 1) ^ 0x1021 : (crc << 1);
-        }
-    }
-    return crc;
-}
 
 /* ── 802.11 frame header helpers ────────────────────────────────────────── */
 /*
@@ -114,7 +102,9 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
 /* ── CSI callback ────────────────────────────────────────────────────────── */
 /*
  * Called by the Wi-Fi driver in its internal task context.
- * We copy header + raw CSI bytes into one ring-buffer slot and return.
+ * We copy header + raw CSI bytes into a static scratch buffer, then push into
+ * the ring buffer and return.  A static buffer is safe because ESP-IDF
+ * serialises CSI callbacks through a single internal task.
  */
 static void csi_cb(void *ctx, wifi_csi_info_t *data)
 {
@@ -127,16 +117,22 @@ static void csi_cb(void *ctx, wifi_csi_info_t *data)
     uint16_t total   = (uint16_t)(sizeof(csi_record_header_t) + csi_len);
 
     if (total > RB_SLOT_SIZE) {
-        /* Payload too large for one slot – drop and count. */
+        /* Payload too large for one slot – drop via rb_push (counted there). */
+        rb_push(&g_ring_buffer, NULL, 0); /* triggers len==0 guard, drops+counts */
+        /* Use the ring buffer's own drop counter via a direct increment instead. */
+        portENTER_CRITICAL_SAFE(&g_ring_buffer.lock);
         g_ring_buffer.dropped++;
+        portEXIT_CRITICAL_SAFE(&g_ring_buffer.lock);
         return;
     }
 
-    /* Build header + payload into a stack buffer.
-     * Stack frame is safe here: csi_len <= RB_SLOT_SIZE - header. */
-    uint8_t slot[RB_SLOT_SIZE];
+    /*
+     * Static scratch – safe because the Wi-Fi driver serialises CSI callbacks
+     * through a single internal task (they are never concurrent).
+     */
+    static uint8_t s_csi_scratch[RB_SLOT_SIZE];
 
-    csi_record_header_t *hdr = (csi_record_header_t *)slot;
+    csi_record_header_t *hdr = (csi_record_header_t *)s_csi_scratch;
     hdr->magic        = PROTO_MAGIC;
     hdr->version      = PROTO_VERSION;
     hdr->record_type  = RECORD_TYPE_CSI;
@@ -149,13 +145,13 @@ static void csi_cb(void *ctx, wifi_csi_info_t *data)
     memcpy(hdr->mac, data->mac, 6);
 
     /* Copy raw CSI payload immediately after the header. */
-    memcpy(slot + sizeof(csi_record_header_t), data->buf, csi_len);
+    memcpy(s_csi_scratch + sizeof(csi_record_header_t), data->buf, csi_len);
 
     /* CRC covers header only. */
     hdr->crc16 = crc16_ccitt((const uint8_t *)hdr,
                               sizeof(csi_record_header_t) - sizeof(hdr->crc16));
 
-    rb_push(&g_ring_buffer, slot, total);
+    rb_push(&g_ring_buffer, s_csi_scratch, total);
 }
 
 /* ── Public init ─────────────────────────────────────────────────────────── */
@@ -176,10 +172,11 @@ void wifi_sensor_init(void)
     ESP_ERROR_CHECK(esp_wifi_set_channel(SENSOR_WIFI_CHANNEL, WIFI_SECOND_CHAN_NONE));
 
     /* 4. Promiscuous mode. */
-    wifi_promiscuous_filter_t filter = {
-        .filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT |
-                       WIFI_PROMIS_FILTER_MASK_DATA,
-    };
+    uint32_t filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT;
+#if CAPTURE_DATA_FRAMES
+    filter_mask |= WIFI_PROMIS_FILTER_MASK_DATA;
+#endif
+    wifi_promiscuous_filter_t filter = { .filter_mask = filter_mask };
     ESP_ERROR_CHECK(esp_wifi_set_promiscuous_filter(&filter));
     ESP_ERROR_CHECK(esp_wifi_set_promiscuous_rx_cb(promisc_cb));
     ESP_ERROR_CHECK(esp_wifi_set_promiscuous(true));

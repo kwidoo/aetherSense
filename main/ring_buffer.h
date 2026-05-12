@@ -2,17 +2,19 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include "freertos/FreeRTOS.h"
+#include "freertos/portmacro.h"
 
 /*
  * Bounded ring buffer for variable-length binary blobs.
  *
- * Each slot stores a fixed-capacity byte array.  The buffer is ISR/callback
- * safe on the producer side: rb_push copies data and updates the write index
- * atomically using a FreeRTOS spinlock so it can be called from a Wi-Fi
- * callback (which runs in a high-priority system task context, not an ISR, but
- * must still return quickly).
+ * Supports multiple concurrent producers (Wi-Fi promiscuous callback and CSI
+ * callback both call rb_push).  A portMUX_TYPE spinlock guards the producer
+ * critical section so rb_push is safe from any FreeRTOS task context on both
+ * cores.  portENTER_CRITICAL_SAFE / portEXIT_CRITICAL_SAFE are used because
+ * they work in both task and ISR contexts.
  *
- * rb_pop is intended for use only from a single consumer task.
+ * rb_pop is intended for use by a SINGLE consumer task only.
  */
 
 #define RB_SLOT_SIZE   512   /* max bytes per slot (covers CSI header + data) */
@@ -24,11 +26,12 @@ typedef struct {
 } rb_slot_t;
 
 typedef struct {
-    rb_slot_t slots[RB_SLOT_COUNT];
-    volatile uint32_t head;          /* consumer reads here   */
-    volatile uint32_t tail;          /* producer writes here  */
-    volatile uint32_t dropped;       /* overrun counter       */
-    volatile uint32_t high_watermark;/* max simultaneous used */
+    rb_slot_t    slots[RB_SLOT_COUNT];
+    portMUX_TYPE lock;               /* multi-producer spinlock               */
+    volatile uint32_t head;          /* consumer reads here (single consumer) */
+    volatile uint32_t tail;          /* producer writes here (lock-protected) */
+    volatile uint32_t dropped;       /* overrun counter (lock-protected)      */
+    volatile uint32_t high_watermark;/* max simultaneous used (lock-protected)*/
 } ring_buffer_t;
 
 void     rb_init(ring_buffer_t *rb);

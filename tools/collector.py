@@ -11,9 +11,9 @@ optionally writes RSSI records to a CSV file.
 
 Protocol summary (little-endian, all structs packed):
   Every record starts with: magic=0xA55A (2B), version (1B), record_type (1B)
-  record_type 1 = RSSI    (24 bytes total, no trailing payload)
-  record_type 2 = CSI     (22-byte header + csi_len raw bytes)
-  record_type 3 = STATUS  (23 bytes total)
+  record_type 1 = RSSI    (26 bytes total, no trailing payload)
+  record_type 2 = CSI     (24-byte header + csi_len raw bytes)
+  record_type 3 = STATUS  (27 bytes total)
 """
 
 import argparse
@@ -37,28 +37,28 @@ RECORD_TYPE_RSSI   = 1
 RECORD_TYPE_CSI    = 2
 RECORD_TYPE_STATUS = 3
 
-# struct rssi_record (24 bytes)
+# struct rssi_record (26 bytes)
 # magic(H) version(B) record_type(B) seq(I) timestamp_us(I)
 # channel(B) rssi(b) frame_type(B) frame_subtype(B)
 # mac(6s) payload_len(H) crc16(H)
 RSSI_FMT  = "<HBBIIBbBB6sHH"
-RSSI_SIZE = struct.calcsize(RSSI_FMT)  # 24
+RSSI_SIZE = struct.calcsize(RSSI_FMT)  # 26
 
-# struct csi_record_header (22 bytes)
+# struct csi_record_header (24 bytes)
 # magic(H) version(B) record_type(B) seq(I) timestamp_us(I)
 # channel(B) rssi(b) mac(6s) csi_len(H) crc16(H)
 CSI_HDR_FMT  = "<HBBIIBb6sHH"
-CSI_HDR_SIZE = struct.calcsize(CSI_HDR_FMT)  # 22
+CSI_HDR_SIZE = struct.calcsize(CSI_HDR_FMT)  # 24
 
-# struct status_record (23 bytes)
+# struct status_record (27 bytes)
 # magic(H) version(B) record_type(B) uptime_ms(I) rssi_sent(I)
 # csi_sent(I) dropped(I) high_watermark(I) channel(B) crc16(H)
-STATUS_FMT  = "<HBBIIIIIbH"
-STATUS_SIZE = struct.calcsize(STATUS_FMT)  # 23
+STATUS_FMT  = "<HBBIIIIIBH"
+STATUS_SIZE = struct.calcsize(STATUS_FMT)  # 27
 
-assert RSSI_SIZE   == 24, f"RSSI size mismatch: {RSSI_SIZE}"
-assert CSI_HDR_SIZE == 22, f"CSI header size mismatch: {CSI_HDR_SIZE}"
-assert STATUS_SIZE  == 23, f"STATUS size mismatch: {STATUS_SIZE}"
+assert RSSI_SIZE   == 26, f"RSSI size mismatch: {RSSI_SIZE}"
+assert CSI_HDR_SIZE == 24, f"CSI header size mismatch: {CSI_HDR_SIZE}"
+assert STATUS_SIZE  == 27, f"STATUS size mismatch: {STATUS_SIZE}"
 
 # ── CRC-16/CCITT-FALSE ────────────────────────────────────────────────────────
 def crc16_ccitt(data: bytes) -> int:

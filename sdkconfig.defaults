@@ -1,0 +1,32 @@
+# ESP32 Wi-Fi RSSI/CSI Sensor – default sdkconfig overrides
+#
+# Apply these before the first build:
+#   idf.py build           (sdkconfig.defaults is picked up automatically)
+#
+# After the first build, edit sdkconfig directly or run:
+#   idf.py menuconfig
+
+# ── Target ────────────────────────────────────────────────────────────────
+# Set via `idf.py set-target esp32s2` or `idf.py set-target esp32`
+
+# ── Wi-Fi ─────────────────────────────────────────────────────────────────
+CONFIG_ESP32_WIFI_CSI_ENABLED=y
+CONFIG_ESP32_WIFI_PROMISCUOUS_RX_BUFFER_NO=16
+CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP32_WIFI_TX_BUFFER_TYPE=1
+
+# ── Logging ───────────────────────────────────────────────────────────────
+# Set log level to ERROR so accidental log calls don't pollute the binary stream.
+CONFIG_LOG_DEFAULT_LEVEL_ERROR=y
+CONFIG_LOG_MAXIMUM_LEVEL_ERROR=y
+
+# ── UART / Serial ─────────────────────────────────────────────────────────
+CONFIG_ESP_CONSOLE_UART_NUM=1
+CONFIG_ESP_CONSOLE_UART_BAUDRATE=115200
+
+# ── FreeRTOS ──────────────────────────────────────────────────────────────
+CONFIG_FREERTOS_HZ=1000
+
+# ── Optimization ──────────────────────────────────────────────────────────
+CONFIG_COMPILER_OPTIMIZATION_PERF=y

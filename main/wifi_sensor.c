@@ -84,7 +84,7 @@ static void promisc_cb(void *buf, wifi_promiscuous_pkt_type_t type)
         .magic        = PROTO_MAGIC,
         .version      = PROTO_VERSION,
         .record_type  = RECORD_TYPE_RSSI,
-        .seq          = s_rssi_seq++,
+        .seq          = __atomic_fetch_add(&s_rssi_seq, 1, __ATOMIC_RELAXED),
         .timestamp_us = (uint32_t)(esp_timer_get_time() & 0xFFFFFFFF),
         .channel      = (uint8_t)rx->channel,
         .rssi         = (int8_t)rx->rssi,
@@ -117,12 +117,8 @@ static void csi_cb(void *ctx, wifi_csi_info_t *data)
     uint16_t total   = (uint16_t)(sizeof(csi_record_header_t) + csi_len);
 
     if (total > RB_SLOT_SIZE) {
-        /* Payload too large for one slot – drop via rb_push (counted there). */
-        rb_push(&g_ring_buffer, NULL, 0); /* triggers len==0 guard, drops+counts */
-        /* Use the ring buffer's own drop counter via a direct increment instead. */
-        portENTER_CRITICAL_SAFE(&g_ring_buffer.lock);
-        g_ring_buffer.dropped++;
-        portEXIT_CRITICAL_SAFE(&g_ring_buffer.lock);
+        /* Payload too large for one slot – count the drop explicitly. */
+        rb_count_drop(&g_ring_buffer);
         return;
     }
 
@@ -136,7 +132,7 @@ static void csi_cb(void *ctx, wifi_csi_info_t *data)
     hdr->magic        = PROTO_MAGIC;
     hdr->version      = PROTO_VERSION;
     hdr->record_type  = RECORD_TYPE_CSI;
-    hdr->seq          = s_csi_seq++;
+    hdr->seq          = __atomic_fetch_add(&s_csi_seq, 1, __ATOMIC_RELAXED);
     hdr->timestamp_us = (uint32_t)(esp_timer_get_time() & 0xFFFFFFFF);
     hdr->channel      = (uint8_t)data->rx_ctrl.channel;
     hdr->rssi         = (int8_t)data->rx_ctrl.rssi;

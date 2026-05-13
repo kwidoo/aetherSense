@@ -9,10 +9,11 @@
  * Bounded ring buffer for variable-length binary blobs.
  *
  * Supports multiple concurrent producers (Wi-Fi promiscuous callback and CSI
- * callback both call rb_push).  A portMUX_TYPE spinlock guards the producer
- * critical section so rb_push is safe from any FreeRTOS task context on both
- * cores.  portENTER_CRITICAL_SAFE / portEXIT_CRITICAL_SAFE are used because
- * they work in both task and ISR contexts.
+ * callback both call rb_push).  A portMUX_TYPE spinlock guards every access to
+ * shared state, so rb_push, rb_pop, rb_used, and rb_count_drop are all safe
+ * from any FreeRTOS task context on both cores.
+ * portENTER_CRITICAL_SAFE / portEXIT_CRITICAL_SAFE are used because they work
+ * in both task and ISR contexts.
  *
  * rb_pop is intended for use by a SINGLE consumer task only.
  */
@@ -37,4 +38,5 @@ typedef struct {
 void     rb_init(ring_buffer_t *rb);
 bool     rb_push(ring_buffer_t *rb, const void *data, uint16_t len);  /* callback safe */
 bool     rb_pop (ring_buffer_t *rb, void *out_data, uint16_t *out_len);
-uint32_t rb_used(const ring_buffer_t *rb);
+uint32_t rb_used(ring_buffer_t *rb);
+void     rb_count_drop(ring_buffer_t *rb);  /* thread-safe drop counter increment */

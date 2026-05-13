@@ -10,11 +10,12 @@
 # Set via `idf.py set-target esp32s2` or `idf.py set-target esp32`
 
 # ── Wi-Fi ─────────────────────────────────────────────────────────────────
-CONFIG_ESP32_WIFI_CSI_ENABLED=y
-CONFIG_ESP32_WIFI_PROMISCUOUS_RX_BUFFER_NO=16
-CONFIG_ESP32_WIFI_STATIC_RX_BUFFER_NUM=10
-CONFIG_ESP32_WIFI_DYNAMIC_RX_BUFFER_NUM=32
-CONFIG_ESP32_WIFI_TX_BUFFER_TYPE=1
+# ESP-IDF v5+ uses CONFIG_ESP_WIFI_* instead of the older CONFIG_ESP32_WIFI_*
+CONFIG_ESP_WIFI_CSI_ENABLED=y
+CONFIG_ESP_WIFI_PROMISCUOUS_RX_BUFFER_NO=16
+CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM=10
+CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM=32
+CONFIG_ESP_WIFI_TX_BUFFER_TYPE=1
 
 # ── Logging ───────────────────────────────────────────────────────────────
 # Set log level to ERROR so accidental log calls don't pollute the binary stream.

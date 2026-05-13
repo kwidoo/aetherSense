@@ -9,11 +9,12 @@ void rb_init(ring_buffer_t *rb)
     rb->lock = (portMUX_TYPE)portMUX_INITIALIZER_UNLOCKED;
 }
 
-uint32_t rb_used(const ring_buffer_t *rb)
+uint32_t rb_used(ring_buffer_t *rb)
 {
-    /* Snapshot under the lock so callers outside rb_push see a consistent view. */
-    uint32_t tail = __atomic_load_n(&rb->tail, __ATOMIC_ACQUIRE);
-    uint32_t head = __atomic_load_n(&rb->head, __ATOMIC_ACQUIRE);
+    portENTER_CRITICAL_SAFE(&rb->lock);
+    uint32_t tail = rb->tail;
+    uint32_t head = rb->head;
+    portEXIT_CRITICAL_SAFE(&rb->lock);
     if (tail >= head) return tail - head;
     return RB_SLOT_COUNT - head + tail;
 }
@@ -51,16 +52,28 @@ bool rb_push(ring_buffer_t *rb, const void *data, uint16_t len)
 
 bool rb_pop(ring_buffer_t *rb, void *out_data, uint16_t *out_len)
 {
+    portENTER_CRITICAL_SAFE(&rb->lock);
+
     uint32_t head = rb->head;
-    /* Acquire barrier ensures we see the slot data written before tail advanced. */
-    uint32_t tail = __atomic_load_n(&rb->tail, __ATOMIC_ACQUIRE);
-    if (head == tail) return false;
+    uint32_t tail = rb->tail;
+    if (head == tail) {
+        portEXIT_CRITICAL_SAFE(&rb->lock);
+        return false;
+    }
 
     rb_slot_t *slot = &rb->slots[head];
     memcpy(out_data, slot->data, slot->len);
     *out_len = slot->len;
 
-    /* Publish consumed slot by advancing head (only this task writes head). */
-    __atomic_store_n(&rb->head, (head + 1) % RB_SLOT_COUNT, __ATOMIC_RELEASE);
+    rb->head = (head + 1) % RB_SLOT_COUNT;
+
+    portEXIT_CRITICAL_SAFE(&rb->lock);
     return true;
+}
+
+void rb_count_drop(ring_buffer_t *rb)
+{
+    portENTER_CRITICAL_SAFE(&rb->lock);
+    rb->dropped++;
+    portEXIT_CRITICAL_SAFE(&rb->lock);
 }

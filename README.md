@@ -66,7 +66,7 @@ Edit `main/sensor_config.h`:
 #define SENSOR_WIFI_CHANNEL 6
 ```
 
-Or pass it at build time:
+Or pass a CMake variable at build time (supported via `main/CMakeLists.txt`):
 
 ```bash
 idf.py build -DSENSOR_WIFI_CHANNEL=11

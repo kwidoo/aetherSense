@@ -37,6 +37,8 @@ RECORD_TYPE_RSSI   = 1
 RECORD_TYPE_CSI    = 2
 RECORD_TYPE_STATUS = 3
 
+RB_SLOT_SIZE = 512  # must match RB_SLOT_SIZE in ring_buffer.h
+
 # struct rssi_record (26 bytes)
 # magic(H) version(B) record_type(B) seq(I) timestamp_us(I)
 # channel(B) rssi(b) frame_type(B) frame_subtype(B)
@@ -197,13 +199,23 @@ def run(port_name: str, baud: int, out_csv: str | None):
             elif rtype == RECORD_TYPE_CSI:
                 rest_hdr = read_exact(port, CSI_HDR_SIZE - 4)
                 raw_hdr = magic_bytes + hdr2 + rest_hdr
-                # csi_len is the last 4 bytes before crc16 in header
+                # Validate header CRC before trusting any header fields.
+                hdr_crc = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 2)[0]
+                if hdr_crc != crc16_ccitt(raw_hdr[:-2]):
+                    bad_crc += 1
+                    print("[warn] CSI header CRC invalid, re-syncing …",
+                          file=sys.stderr)
+                    continue
                 csi_len = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 4)[0]
+                max_csi_payload = RB_SLOT_SIZE - CSI_HDR_SIZE
+                if csi_len > max_csi_payload:
+                    bad_crc += 1
+                    print(f"[warn] CSI csi_len={csi_len} exceeds max "
+                          f"{max_csi_payload}, re-syncing …", file=sys.stderr)
+                    continue
                 payload = read_exact(port, csi_len)
                 rec = parse_csi_header(raw_hdr, payload)
                 csi_count += 1
-                if not rec["crc_ok"]:
-                    bad_crc += 1
                 print(f"CSI   seq={rec['seq']:6d} ch={rec['channel']:2d} "
                       f"rssi={rec['rssi']:4d} dBm  mac={rec['mac']}  "
                       f"len={rec['csi_len']}  crc={'ok' if rec['crc_ok'] else 'BAD'}")

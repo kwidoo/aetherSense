@@ -36,11 +36,20 @@ void app_main(void)
              SENSOR_WIFI_CHANNEL, SENSOR_BAUD_RATE);
 
     /* 5. Serial writer task – single consumer draining ring buffer. */
-    xTaskCreatePinnedToCore(serial_writer_task,
+#if CONFIG_FREERTOS_UNICORE
+    const BaseType_t writer_core = 0;
+#else
+    const BaseType_t writer_core = 1; /* leave core 0 for Wi-Fi on dual-core */
+#endif
+    BaseType_t result = xTaskCreatePinnedToCore(serial_writer_task,
                             "serial_writer",
                             4096,   /* stack bytes */
                             NULL,
                             5,      /* priority    */
                             NULL,
-                            1);     /* pin to core 1, leaving core 0 for Wi-Fi */
+                            writer_core);
+    if (result != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create serial writer task");
+        return;
+    }
 }

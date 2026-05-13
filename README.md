@@ -86,7 +86,7 @@ Every record begins with:
 | 2 | version | uint8 | `1` |
 | 3 | record_type | uint8 | `1`=RSSI `2`=CSI `3`=STATUS |
 
-### RSSI Record (24 bytes, record_type=1)
+### RSSI Record (26 bytes, record_type=1)
 
 | Offset | Field | Type | Notes |
 |---|---|---|---|
@@ -101,13 +101,13 @@ Every record begins with:
 | 15 | frame_subtype | uint8 | 802.11 subtype nibble |
 | 16 | mac | 6 bytes | addr2 (BSSID / transmitter) |
 | 22 | payload_len | uint16 | 0 for RSSI records |
-| 23 | crc16 | uint16 | CRC-16/CCITT-FALSE over bytes 0–21 |
+| 24 | crc16 | uint16 | CRC-16/CCITT-FALSE over bytes 0–23 |
 
 **MAC field**: addr2 from 802.11 MAC header (bytes 10–15 of the MPDU).
 - Beacon / probe response → BSSID (transmitter address)
 - Data frame → transmitter / source address
 
-### CSI Record (22-byte header + N raw bytes, record_type=2)
+### CSI Record (24-byte header + N raw bytes, record_type=2)
 
 | Offset | Field | Type | Notes |
 |---|---|---|---|
@@ -120,10 +120,10 @@ Every record begins with:
 | 13 | rssi | int8 | |
 | 14 | mac | 6 bytes | |
 | 20 | csi_len | uint16 | bytes of raw CSI payload that follow |
-| 22 | crc16 | uint16 | covers header only (bytes 0–19) |
+| 22 | crc16 | uint16 | covers header only (bytes 0–21) |
 | 24 | *raw CSI* | csi_len bytes | as returned by ESP-IDF |
 
-### STATUS Record (23 bytes, record_type=3)
+### STATUS Record (27 bytes, record_type=3)
 
 | Offset | Field | Type | Notes |
 |---|---|---|---|
@@ -136,7 +136,7 @@ Every record begins with:
 | 16 | records_dropped | uint32 | ring-buffer overrun count |
 | 20 | queue_high_watermark | uint32 | max simultaneous slots used |
 | 24 | channel | uint8 | |
-| 25 | crc16 | uint16 | covers bytes 0–22 |
+| 25 | crc16 | uint16 | covers bytes 0–24 |
 
 ---
 

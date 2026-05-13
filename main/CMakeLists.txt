@@ -4,6 +4,7 @@ idf_component_register(
         "wifi_sensor.c"
         "serial_writer.c"
         "ring_buffer.c"
+        "crc16.c"
     INCLUDE_DIRS "."
     REQUIRES
         nvs_flash

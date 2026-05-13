@@ -46,8 +46,7 @@ idf.py -p /dev/ttyUSB0 flash
 ## Monitor (debug mode)
 
 If `SENSOR_DEBUG_LOGS=1` is set, human-readable startup lines are printed on
-boot.  Use a separate terminal and redirect to UART1 so the binary stream on
-UART0 stays clean.
+boot.  Logs are suppressed via `esp_log_set_vprintf(NULL)` so UART0 carries only binary records.
 
 ```bash
 idf.py -p /dev/ttyUSB0 monitor

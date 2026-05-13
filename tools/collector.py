@@ -21,7 +21,6 @@ import csv
 import struct
 import sys
 import time
-from pathlib import Path
 
 try:
     import serial
@@ -165,85 +164,86 @@ def run(port_name: str, baud: int, out_csv: str | None):
                          "frame_type", "frame_subtype", "mac"])
 
     print(f"Opening {port_name} at {baud} baud …")
-    with serial.Serial(port_name, baud, timeout=2.0) as port:
-        print("Connected. Waiting for records …\n")
-        rssi_count = csi_count = status_count = bad_crc = 0
-        start = time.time()
+    try:
+        with serial.Serial(port_name, baud, timeout=2.0) as port:
+            print("Connected. Waiting for records …\n")
+            rssi_count = csi_count = status_count = bad_crc = 0
+            start = time.time()
 
-        while True:
-            # Sync to magic bytes
-            magic_bytes = sync_to_magic(port)
+            while True:
+                # Sync to magic bytes
+                magic_bytes = sync_to_magic(port)
 
-            # Read version + record_type
-            hdr2 = read_exact(port, 2)
-            version, rtype = struct.unpack("BB", hdr2)
+                # Read version + record_type
+                hdr2 = read_exact(port, 2)
+                version, rtype = struct.unpack("BB", hdr2)
 
-            if rtype == RECORD_TYPE_RSSI:
-                rest = read_exact(port, RSSI_SIZE - 4)
-                raw = magic_bytes + hdr2 + rest
-                rec = parse_rssi(raw)
-                rssi_count += 1
-                if not rec["crc_ok"]:
-                    bad_crc += 1
-                print(f"RSSI  seq={rec['seq']:6d} ch={rec['channel']:2d} "
-                      f"rssi={rec['rssi']:4d} dBm  mac={rec['mac']}  "
-                      f"type={rec['frame_type']}/{rec['frame_subtype']}  "
-                      f"crc={'ok' if rec['crc_ok'] else 'BAD'}")
-                if writer:
-                    writer.writerow([rec["timestamp_us"], rec["seq"],
-                                     rec["channel"], rec["rssi"],
-                                     rec["frame_type"], rec["frame_subtype"],
-                                     rec["mac"]])
-                    csv_file.flush()
+                if rtype == RECORD_TYPE_RSSI:
+                    rest = read_exact(port, RSSI_SIZE - 4)
+                    raw = magic_bytes + hdr2 + rest
+                    rec = parse_rssi(raw)
+                    rssi_count += 1
+                    if not rec["crc_ok"]:
+                        bad_crc += 1
+                    print(f"RSSI  seq={rec['seq']:6d} ch={rec['channel']:2d} "
+                          f"rssi={rec['rssi']:4d} dBm  mac={rec['mac']}  "
+                          f"type={rec['frame_type']}/{rec['frame_subtype']}  "
+                          f"crc={'ok' if rec['crc_ok'] else 'BAD'}")
+                    if writer:
+                        writer.writerow([rec["timestamp_us"], rec["seq"],
+                                         rec["channel"], rec["rssi"],
+                                         rec["frame_type"], rec["frame_subtype"],
+                                         rec["mac"]])
+                        csv_file.flush()
 
-            elif rtype == RECORD_TYPE_CSI:
-                rest_hdr = read_exact(port, CSI_HDR_SIZE - 4)
-                raw_hdr = magic_bytes + hdr2 + rest_hdr
-                # Validate header CRC before trusting any header fields.
-                hdr_crc = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 2)[0]
-                if hdr_crc != crc16_ccitt(raw_hdr[:-2]):
-                    bad_crc += 1
-                    print("[warn] CSI header CRC invalid, re-syncing …",
+                elif rtype == RECORD_TYPE_CSI:
+                    rest_hdr = read_exact(port, CSI_HDR_SIZE - 4)
+                    raw_hdr = magic_bytes + hdr2 + rest_hdr
+                    # Validate header CRC before trusting any header fields.
+                    hdr_crc = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 2)[0]
+                    if hdr_crc != crc16_ccitt(raw_hdr[:-2]):
+                        bad_crc += 1
+                        print("[warn] CSI header CRC invalid, re-syncing …",
+                              file=sys.stderr)
+                        continue
+                    csi_len = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 4)[0]
+                    max_csi_payload = RB_SLOT_SIZE - CSI_HDR_SIZE
+                    if csi_len > max_csi_payload:
+                        bad_crc += 1
+                        print(f"[warn] CSI csi_len={csi_len} exceeds max "
+                              f"{max_csi_payload}, re-syncing …", file=sys.stderr)
+                        continue
+                    payload = read_exact(port, csi_len)
+                    rec = parse_csi_header(raw_hdr, payload)
+                    csi_count += 1
+                    print(f"CSI   seq={rec['seq']:6d} ch={rec['channel']:2d} "
+                          f"rssi={rec['rssi']:4d} dBm  mac={rec['mac']}  "
+                          f"len={rec['csi_len']}  crc={'ok' if rec['crc_ok'] else 'BAD'}")
+
+                elif rtype == RECORD_TYPE_STATUS:
+                    rest = read_exact(port, STATUS_SIZE - 4)
+                    raw = magic_bytes + hdr2 + rest
+                    rec = parse_status(raw)
+                    status_count += 1
+                    if not rec["crc_ok"]:
+                        bad_crc += 1
+                    elapsed = time.time() - start
+                    print(
+                        f"\n── STATUS  uptime={rec['uptime_ms']/1000:.1f}s  "
+                        f"rssi_sent={rec['rssi_records_sent']}  "
+                        f"csi_sent={rec['csi_records_sent']}  "
+                        f"dropped={rec['records_dropped']}  "
+                        f"hwm={rec['queue_high_watermark']}  "
+                        f"ch={rec['channel']}  "
+                        f"[host: {rssi_count}R {csi_count}C {bad_crc}bad "
+                        f"in {elapsed:.1f}s]\n"
+                    )
+                else:
+                    print(f"[warn] unknown record_type={rtype}, re-syncing …",
                           file=sys.stderr)
-                    continue
-                csi_len = struct.unpack_from("<H", raw_hdr, CSI_HDR_SIZE - 4)[0]
-                max_csi_payload = RB_SLOT_SIZE - CSI_HDR_SIZE
-                if csi_len > max_csi_payload:
-                    bad_crc += 1
-                    print(f"[warn] CSI csi_len={csi_len} exceeds max "
-                          f"{max_csi_payload}, re-syncing …", file=sys.stderr)
-                    continue
-                payload = read_exact(port, csi_len)
-                rec = parse_csi_header(raw_hdr, payload)
-                csi_count += 1
-                print(f"CSI   seq={rec['seq']:6d} ch={rec['channel']:2d} "
-                      f"rssi={rec['rssi']:4d} dBm  mac={rec['mac']}  "
-                      f"len={rec['csi_len']}  crc={'ok' if rec['crc_ok'] else 'BAD'}")
-
-            elif rtype == RECORD_TYPE_STATUS:
-                rest = read_exact(port, STATUS_SIZE - 4)
-                raw = magic_bytes + hdr2 + rest
-                rec = parse_status(raw)
-                status_count += 1
-                if not rec["crc_ok"]:
-                    bad_crc += 1
-                elapsed = time.time() - start
-                print(
-                    f"\n── STATUS  uptime={rec['uptime_ms']/1000:.1f}s  "
-                    f"rssi_sent={rec['rssi_records_sent']}  "
-                    f"csi_sent={rec['csi_records_sent']}  "
-                    f"dropped={rec['records_dropped']}  "
-                    f"hwm={rec['queue_high_watermark']}  "
-                    f"ch={rec['channel']}  "
-                    f"[host: {rssi_count}R {csi_count}C {bad_crc}bad "
-                    f"in {elapsed:.1f}s]\n"
-                )
-            else:
-                print(f"[warn] unknown record_type={rtype}, re-syncing …",
-                      file=sys.stderr)
-
-    if csv_file:
-        csv_file.close()
+    finally:
+        if csv_file:
+            csv_file.close()
 
 
 # ── CLI ───────────────────────────────────────────────────────────────────────

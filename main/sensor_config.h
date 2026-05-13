@@ -43,8 +43,8 @@
 #endif
 
 /*
- * Set to 1 to enable ESP-IDF log output (redirected to UART1).
- * Set to 0 to suppress all logs and keep UART0 binary-clean.
+ * Set to 1 to enable ESP-IDF log output.
+ * Set to 0 to suppress all logs via esp_log_set_vprintf(NULL) and keep UART0 binary-clean.
  */
 #ifndef SENSOR_DEBUG_LOGS
 #define SENSOR_DEBUG_LOGS         0

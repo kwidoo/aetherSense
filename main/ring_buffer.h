@@ -40,3 +40,4 @@ bool     rb_push(ring_buffer_t *rb, const void *data, uint16_t len);  /* callbac
 bool     rb_pop (ring_buffer_t *rb, void *out_data, uint16_t *out_len);
 uint32_t rb_used(ring_buffer_t *rb);
 void     rb_count_drop(ring_buffer_t *rb);  /* thread-safe drop counter increment */
+void     rb_stats(ring_buffer_t *rb, uint32_t *dropped, uint32_t *high_watermark); /* lock-safe stats snapshot */

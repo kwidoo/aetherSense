@@ -69,8 +69,12 @@ void serial_writer_send_raw(const void *data, size_t len)
 static void send_status_record(void)
 {
     /* Query the actual current channel rather than the compile-time default. */
-    uint8_t ch = SENSOR_WIFI_CHANNEL, sec = 0;
+    uint8_t ch = SENSOR_WIFI_CHANNEL;
+    wifi_second_chan_t sec = WIFI_SECOND_CHAN_NONE;
     esp_wifi_get_channel(&ch, &sec);
+
+    uint32_t rb_dropped = 0, rb_hwm = 0;
+    rb_stats(&g_ring_buffer, &rb_dropped, &rb_hwm);
 
     status_record_t r = {
         .magic                = PROTO_MAGIC,
@@ -79,8 +83,8 @@ static void send_status_record(void)
         .uptime_ms            = (uint32_t)(esp_timer_get_time() / 1000),
         .rssi_records_sent    = g_rssi_records_sent,
         .csi_records_sent     = g_csi_records_sent,
-        .records_dropped      = g_ring_buffer.dropped,
-        .queue_high_watermark = g_ring_buffer.high_watermark,
+        .records_dropped      = rb_dropped,
+        .queue_high_watermark = rb_hwm,
         .channel              = ch,
         .crc16                = 0,
     };

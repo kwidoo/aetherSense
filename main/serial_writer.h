@@ -8,8 +8,8 @@
  * A dedicated FreeRTOS task calls serial_writer_task() which loops forever,
  * popping slots and writing them verbatim to the configured UART port.
  *
- * Logs are redirected to UART1 (or suppressed) so the binary stream on UART0
- * stays clean.
+ * Logs are suppressed via esp_log_set_vprintf(NULL) so UART0 carries only
+ * binary records.
  */
 
 void serial_writer_init(void);

@@ -77,3 +77,11 @@ void rb_count_drop(ring_buffer_t *rb)
     rb->dropped++;
     portEXIT_CRITICAL_SAFE(&rb->lock);
 }
+
+void rb_stats(ring_buffer_t *rb, uint32_t *dropped, uint32_t *high_watermark)
+{
+    portENTER_CRITICAL_SAFE(&rb->lock);
+    *dropped        = rb->dropped;
+    *high_watermark = rb->high_watermark;
+    portEXIT_CRITICAL_SAFE(&rb->lock);
+}
